@@ -1,0 +1,339 @@
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script type="text/javascript" src="https://d3js.org/d3.v7.min.js"></script>
+    <script type="text/javascript" src=https://cdn.bootcdn.net/ajax/libs/jquery/3.6.0/jquery.min.js></script>
+    <script src="https://cdn.jsdelivr.net/npm/lodash@4.17.21/lodash.min.js"></script>
+    <script type="text/javascript"
+        src="https://cdnjs.cloudflare.com/ajax/libs/mocha/1.0.2/package/lib/browser/fs.js"></script>
+    <title>TSLA stock price change visualization</title>
+</head>
+
+<body>
+    <h2>特斯拉 TSLA 2019~2022股票数据可视化</h2>
+    <p>
+        <!-- 年份选择框（单选） （其实是不会用d3写-->
+    <div id="selectYear">请选择需要显示的年份：
+        <label> 2019年
+            <input type="radio" name="radioYear" class="radioYear" value="2019" checked="true">
+        </label>
+        <label> 2020年
+            <input type="radio" name="radioYear" value="2020" class="radioYear">
+        </label>
+        <label> 2021年
+            <input type="radio" name="radioYear" value="2021" class="radioYear">
+        </label>
+        <label> 2022年
+            <input type="radio" name="radioYear" value="2022" class="radioYear">
+        </label>
+    </div>
+    <div id="selectMonth">请选择需要显示的月份：
+        <label>一月
+            <input type="radio" name="radioMonth" class="radioMonth" value="01">
+        </label>
+        <label>二月
+            <input type="radio" name="radioMonth" class="radioMonth" value="02">
+        </label>
+        <label>三月
+            <input type="radio" name="radioMonth" class="radioMonth" value="03">
+        </label>
+        <label>四月
+            <input type="radio" name="radioMonth" class="radioMonth" value="04">
+        </label>
+        <label>五月
+            <input type="radio" name="radioMonth" class="radioMonth" value="05">
+        </label>
+        <label>六月
+            <input type="radio" name="radioMonth" class="radioMonth" value="06">
+        </label>
+        <label>七月
+            <input type="radio" name="radioMonth" class="radioMonth" value="07">
+        </label>
+        <label>八月
+            <input type="radio" name="radioMonth" class="radioMonth" value="08">
+        </label>
+        <label>九月
+            <input type="radio" name="radioMonth" class="radioMonth" value="09">
+        </label>
+        <label>十月
+            <input type="radio" name="radioMonth" class="radioMonth" value="10">
+        </label>
+        <label>十一月
+            <input type="radio" name="radioMonth" class="radioMonth" value="11">
+        </label>
+        <label>十二月
+            <input type="radio" name="radioMonth" class="radioMonth" value="12">
+        </label>
+        <label>ALL
+            <input type="radio" name="radioMonth" class="radioMonth" value="ALL" checked="true">
+        </label>
+    </div>
+    </p>
+    <script>
+        var stockdata;
+
+        //年月筛选器
+        var yearSelector = ["2019", "2020", "2021", "2022"];
+        var monthSelector = ["01", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11", "12"];
+
+        //设置画布与柱状图参数
+        var svgWidth = 1200;
+        var svgHeight = 300;
+        var svgHeight1 = 100;
+        var barPadding = 0; //条形图间隔
+
+        //数据筛选函数
+        //果然CV编程的终点就是造轮子（？
+        var dataFilter = function (rawData, year, month) {
+            var yearPointer = [];
+            var monthPointer = [];
+
+            var result = [];
+
+            //获取每一行数据的年月
+            for (i = 0; i < rawData.length; i++) {
+                yearPointer[i] = _.split(rawData[i].Date, "-")[0];
+                monthPointer[i] = _.split(rawData[i].Date, "-")[1];
+            };
+
+            //判断是否满足筛选条件
+            for (i = 0; i < year.length; i++) {
+                for (j = 0; j < month.length; j++) {
+                    for (k = 0; k < rawData.length; k++) {
+                        if ((year[i] == yearPointer[k]) && (month[j] == monthPointer[k])) {
+                            //条件满足后，将其筛选出来
+                            result.push(rawData[k]);
+                        };
+                    };
+                };
+            };
+
+            return result;
+        };
+
+        //字符串转数字函数
+        var stringToFloat = function (rawData) {
+            var result = [];
+            for (i = 0; i < rawData.length; i++) {
+                var date = rawData[i].Date;
+                var open = Number(rawData[i].Open);
+                var close = Number(rawData[i].Close);
+                var high = Number(rawData[i].High);
+                var low = Number(rawData[i].Low);
+                var volume = Number(rawData[i].Volume);
+
+                result.push({
+                    "Date": date,
+                    "Open": open,
+                    "Close": close,
+                    "High": high,
+                    "Low": low,
+                    "Volume": volume
+                });
+            };
+
+            return result;
+        };
+
+
+        //创建svg
+        var barSvg = d3.select("body")
+            .append("div")
+            .text("K线图")
+            .append("svg")
+            .attr("width", svgWidth)
+            .attr("height", svgHeight)
+            .attr("style", "border:1px dashed")
+            .attr("id", "container1");
+        var barSvg1 = d3.select("body")
+            .append("div")
+            .text("交易量")
+            .append("svg")
+            .attr("width", svgWidth)
+            .attr("height", svgHeight1)
+            .attr("style", "border:1px dashed")
+            .attr("id", "container2"); 
+
+        //读取CSV数据
+        d3.csv("TSLA.csv").then(
+            //到最后发现不管是JSON还是CSV都会被d3读成Array，捏麻麻的
+            data => {
+                stockdata = stringToFloat(data);
+                //记录日志
+                console.log(data);
+                console.log(stockdata);
+
+                //创建选择函数
+                var updateStockData = function () {
+                    var yearList = [];
+                    var monthList = [];
+
+                    var yearUpdator = document.getElementsByClassName("radioYear");
+                    var monthUpdator = document.getElementsByClassName("radioMonth");
+                    //传入选择值
+                    for (i = 0; i < yearSelector.length; i++) {
+                        if (yearUpdator[i].checked) {
+                            yearList.push(yearUpdator[i].defaultValue);
+                        };
+                    };
+                    if (monthUpdator[12].checked) { //如果月份选ALL，直接把整个列表推进去
+                        for (i = 0; i < monthSelector.length; i++) {
+                            monthList.push(monthSelector[i]);
+                        };
+                    }
+                    else {
+                        for (i = 0; i < monthSelector.length; i++) {
+                            if (monthUpdator[i].checked) {
+                                monthList.push(monthUpdator[i].defaultValue);
+                            };
+                        };
+                    };
+
+                    //生成筛选数据
+                    var filtereddata = dataFilter(stockdata, yearList, monthList);
+                    console.log(filtereddata);
+
+                    //创建比例尺
+                    var yScaleOfBar = d3.scaleLinear()
+                        .domain([d3.min(filtereddata, d => Math.min.apply(Math, [d.Open, d.Close])),
+                        d3.max(filtereddata, d => Math.max.apply(Math, [d.Open, d.Close]))])
+                        .range([10, svgHeight - 10]);
+                    var yScaleOfBar1 = d3.scaleLinear()
+                        .domain([d3.min(filtereddata, d => Math.min.apply(Math, [d.High, d.Low])), d3.max(filtereddata,
+                            d => Math.max.apply(Math, [d.High, d.Low]))])
+                        .range([10, svgHeight - 10]);
+                    var yScaleOfBar2 = d3.scaleLinear()
+                        .domain(d3.extent(filtereddata, d => d.Volume))
+                        .range([0, svgHeight1]);
+
+                    //太棒了，我逐渐理解一切.jpg
+
+                    //绘制k线图
+                    //创建条形（阳/阴线实体）
+                    var rects = barSvg.selectAll("#rectsOfReal").data(filtereddata).join(
+                        enter => {  //加入元素
+                            return enter.append("rect")
+                                .attr("x", (d, i) => i * ((svgWidth - barPadding) / filtereddata.length) + barPadding)
+                                // ↑↑↑这一行的目的是存储上一次筛选条件下的数值，从而实现更加平滑的渐变
+                                .attr("y", svgHeight)
+                                .attr("height", 0)
+                                .attr("id", "rectsOfReal");  //因为需要让多组图形堆叠到一张SVG里面，需要让每一组rect都有自己的ID。
+                        },
+                        update => update,   //保留的元素
+                        exit => {   //删除的元素
+                            exit/*.transition()   //实现消失渐变
+                                .duration(1000)*/
+                                .attr("y", svgHeight)
+                                .attr("height", 0)
+                        }
+                    )
+                        .attr("width", (svgWidth - barPadding) / filtereddata.length + barPadding)
+                        .attr("fill", d => {
+                            if (d.Open > d.Close) {
+                                return "green";
+                            }
+                            else {
+                                return "red";
+                            }
+                        })
+                        .transition()
+                        .duration(1000)
+                        .attr("x", (d, i) => i * ((svgWidth - barPadding) / filtereddata.length) + barPadding)
+                        .attr("y", d => {
+                            if (d.Open > d.Close) {
+                                return (svgHeight - yScaleOfBar(d.Open));
+                            }
+                            else {
+                                return (svgHeight - yScaleOfBar(d.Close));
+                            }
+                        })
+                        .attr("height", d => {
+                            if (d.Open > d.Close) {
+                                return yScaleOfBar(d.Open) - yScaleOfBar(d.Close);
+                            }
+                            else {
+                                return yScaleOfBar(d.Close) - yScaleOfBar(d.Open);
+                            };
+                        });
+
+                    //创建条形（大阳/阴线）
+                    var rects = barSvg.selectAll("#rectsOfBig").data(filtereddata).join(
+                        enter => {
+                            return enter.append("rect")
+                                .attr("x", (d, i) => i * ((svgWidth - barPadding) / filtereddata.length) + barPadding)
+                                .attr("y", svgHeight)
+                                .attr("height", 0)
+                                .attr("id", "rectsOfBig");
+                        },
+                        update => update,
+                        exit => {
+                            exit/*.transition()
+                                .duration(1000)*/
+                                .attr("y", svgHeight)
+                                .attr("height", 0)
+                        }
+                    )
+                        .attr("width", 1)
+                        .attr("fill", d => {
+                            if (d.Open > d.Close) {
+                                return "green";
+                            }
+                            else {
+                                return "red";
+                            }
+                        })
+                        .transition()
+                        .duration(1000)
+                        .attr("x", (d, i) => i * ((svgWidth - barPadding) / filtereddata.length) + barPadding + ((svgWidth - barPadding) / filtereddata.length + barPadding) / 2)
+                        .attr("y", d => svgHeight - yScaleOfBar1(d.High))
+                        .attr("height", d => yScaleOfBar1(d.High) - yScaleOfBar1(d.Low));
+                    //创建条形（交易量）
+                    var rects = barSvg1.selectAll("#rectsOfVol").data(filtereddata).join(
+                        enter => {
+                            return enter.append("rect")
+                                .attr("x", (d, i) => i * ((svgWidth - barPadding) / filtereddata.length) + barPadding)
+                                .attr("y", svgHeight1)
+                                .attr("height", 0)
+                                .attr("id", "rectsOfVol");
+                        },
+                        update => update,
+                        exit => {
+                            exit/*.transition()
+                                .duration(1000)*/
+                                .attr("y", svgHeight)
+                                .attr("height", 0)
+                        }
+                    )
+                        .attr("width", (svgWidth - barPadding) / filtereddata.length + barPadding)
+                        .attr("fill", d => {
+                            if (d.Open > d.Close) {
+                                return "green";
+                            }
+                            else {
+                                return "red";
+                            }
+                        })
+                        .transition()
+                        .duration(1000)
+                        .attr("x", (d, i) => i * ((svgWidth - barPadding) / filtereddata.length))
+                        .attr("y", d => svgHeight1 - yScaleOfBar2(d.Volume))
+                        .attr("height", d => yScaleOfBar2(d.Volume));
+
+
+
+                };
+
+                //筛选
+                d3.selectAll('input').on('click', updateStockData);
+                updateStockData();
+            }
+        );
+
+
+    </script>
+</body>
+
+</html>
